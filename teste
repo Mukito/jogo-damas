@@ -1,0 +1,396 @@
+import React, { useState } from 'react';
+import { Settings, RotateCcw } from 'lucide-react';
+
+const CheckersGame = () => {
+  const [board, setBoard] = useState(initializeBoard());
+  const [selectedPiece, setSelectedPiece] = useState(null);
+  const [currentPlayer, setCurrentPlayer] = useState('red');
+  const [showSettings, setShowSettings] = useState(false);
+  const [boardColor1, setBoardColor1] = useState('#f0d9b5');
+  const [boardColor2, setBoardColor2] = useState('#b58863');
+  const [redPieceColor, setRedPieceColor] = useState('#dc2626');
+  const [blackPieceColor, setBlackPieceColor] = useState('#1f2937');
+  const [mustCapture, setMustCapture] = useState(null);
+
+  function initializeBoard() {
+    const b = Array(8).fill(null).map(() => Array(8).fill(null));
+    
+    // Peças pretas (topo)
+    for (let row = 0; row < 3; row++) {
+      for (let col = 0; col < 8; col++) {
+        if ((row + col) % 2 === 1) {
+          b[row][col] = { color: 'black', isKing: false };
+        }
+      }
+    }
+    
+    // Peças vermelhas (baixo)
+    for (let row = 5; row < 8; row++) {
+      for (let col = 0; col < 8; col++) {
+        if ((row + col) % 2 === 1) {
+          b[row][col] = { color: 'red', isKing: false };
+        }
+      }
+    }
+    
+    return b;
+  }
+
+  function getValidMoves(row, col, boardState = board, captureOnly = false) {
+    const piece = boardState[row][col];
+    if (!piece) return [];
+    
+    const moves = [];
+    
+    // Direções baseadas no tipo de peça
+    const directions = piece.isKing 
+      ? [[-1, -1], [-1, 1], [1, -1], [1, 1]]
+      : piece.color === 'red' 
+        ? [[-1, -1], [-1, 1]]
+        : [[1, -1], [1, 1]];
+    
+    // Verifica capturas
+    for (const [dr, dc] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
+      if (piece.isKing) {
+        // Dama pode capturar em qualquer distância na diagonal
+        for (let dist = 1; dist < 8; dist++) {
+          const midRow = row + dr * dist;
+          const midCol = col + dc * dist;
+          
+          if (midRow < 0 || midRow >= 8 || midCol < 0 || midCol >= 8) break;
+          
+          const midPiece = boardState[midRow][midCol];
+          
+          if (midPiece) {
+            if (midPiece.color !== piece.color) {
+              // Encontrou peça inimiga, verifica casas vazias depois dela
+              for (let landDist = 1; landDist < 8; landDist++) {
+                const jumpRow = midRow + dr * landDist;
+                const jumpCol = midCol + dc * landDist;
+                
+                if (jumpRow < 0 || jumpRow >= 8 || jumpCol < 0 || jumpCol >= 8) break;
+                
+                if (!boardState[jumpRow][jumpCol]) {
+                  moves.push({ 
+                    row: jumpRow, 
+                    col: jumpCol, 
+                    capture: { row: midRow, col: midCol } 
+                  });
+                } else {
+                  break;
+                }
+              }
+            }
+            break;
+          }
+        }
+      } else {
+        // Peça normal captura apenas uma casa de distância
+        const jumpRow = row + dr * 2;
+        const jumpCol = col + dc * 2;
+        const midRow = row + dr;
+        const midCol = col + dc;
+        
+        if (jumpRow >= 0 && jumpRow < 8 && jumpCol >= 0 && jumpCol < 8) {
+          const midPiece = boardState[midRow][midCol];
+          if (midPiece && midPiece.color !== piece.color && !boardState[jumpRow][jumpCol]) {
+            moves.push({ 
+              row: jumpRow, 
+              col: jumpCol, 
+              capture: { row: midRow, col: midCol } 
+            });
+          }
+        }
+      }
+    }
+    
+    // Se não for captura obrigatória, adiciona movimentos simples
+    if (!captureOnly && moves.length === 0) {
+      for (const [dr, dc] of directions) {
+        if (piece.isKing) {
+          // Dama pode se mover qualquer distância na diagonal
+          for (let dist = 1; dist < 8; dist++) {
+            const newRow = row + dr * dist;
+            const newCol = col + dc * dist;
+            
+            if (newRow < 0 || newRow >= 8 || newCol < 0 || newCol >= 8) break;
+            
+            if (!boardState[newRow][newCol]) {
+              moves.push({ row: newRow, col: newCol, capture: null });
+            } else {
+              break;
+            }
+          }
+        } else {
+          // Peça normal move apenas uma casa
+          const newRow = row + dr;
+          const newCol = col + dc;
+          
+          if (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8) {
+            if (!boardState[newRow][newCol]) {
+              moves.push({ row: newRow, col: newCol, capture: null });
+            }
+          }
+        }
+      }
+    }
+    
+    return moves;
+  }
+
+  function hasCaptures(color, boardState = board) {
+    for (let row = 0; row < 8; row++) {
+      for (let col = 0; col < 8; col++) {
+        const piece = boardState[row][col];
+        if (piece && piece.color === color) {
+          const moves = getValidMoves(row, col, boardState, false);
+          if (moves.some(m => m.capture)) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  function handleSquareClick(row, col) {
+    if (mustCapture) {
+      // Deve continuar capturando com a mesma peça
+      const validMoves = getValidMoves(mustCapture.row, mustCapture.col);
+      const captureMove = validMoves.find(m => m.row === row && m.col === col && m.capture);
+      
+      if (captureMove) {
+        const newBoard = board.map(r => [...r]);
+        const piece = newBoard[mustCapture.row][mustCapture.col];
+        
+        newBoard[row][col] = piece;
+        newBoard[mustCapture.row][mustCapture.col] = null;
+        newBoard[captureMove.capture.row][captureMove.capture.col] = null;
+        
+        // Promove a dama
+        if ((piece.color === 'red' && row === 0) || 
+            (piece.color === 'black' && row === 7)) {
+          newBoard[row][col].isKing = true;
+        }
+        
+        setBoard(newBoard);
+        
+        // Verifica se pode continuar capturando
+        const furtherCaptures = getValidMoves(row, col, newBoard, false).filter(m => m.capture);
+        
+        if (furtherCaptures.length > 0) {
+          setMustCapture({ row, col });
+          setSelectedPiece({ row, col });
+        } else {
+          setMustCapture(null);
+          setSelectedPiece(null);
+          setCurrentPlayer(currentPlayer === 'red' ? 'black' : 'red');
+        }
+      }
+      return;
+    }
+    
+    if (selectedPiece) {
+      const validMoves = getValidMoves(selectedPiece.row, selectedPiece.col);
+      const move = validMoves.find(m => m.row === row && m.col === col);
+      
+      if (move) {
+        const newBoard = board.map(r => [...r]);
+        const piece = newBoard[selectedPiece.row][selectedPiece.col];
+        
+        newBoard[row][col] = piece;
+        newBoard[selectedPiece.row][selectedPiece.col] = null;
+        
+        if (move.capture) {
+          newBoard[move.capture.row][move.capture.col] = null;
+        }
+        
+        // Promove a dama
+        if ((piece.color === 'red' && row === 0) || 
+            (piece.color === 'black' && row === 7)) {
+          newBoard[row][col].isKing = true;
+        }
+        
+        setBoard(newBoard);
+        
+        // Verifica se pode continuar capturando
+        if (move.capture) {
+          const furtherCaptures = getValidMoves(row, col, newBoard, false).filter(m => m.capture);
+          
+          if (furtherCaptures.length > 0) {
+            setMustCapture({ row, col });
+            setSelectedPiece({ row, col });
+            return;
+          }
+        }
+        
+        setSelectedPiece(null);
+        setMustCapture(null);
+        setCurrentPlayer(currentPlayer === 'red' ? 'black' : 'red');
+      } else {
+        setSelectedPiece(null);
+      }
+    } else {
+      const piece = board[row][col];
+      if (piece && piece.color === currentPlayer) {
+        const playerHasCaptures = hasCaptures(currentPlayer);
+        const pieceHasCaptures = getValidMoves(row, col).some(m => m.capture);
+        
+        // Se há capturas disponíveis, só permite selecionar peças que podem capturar
+        if (playerHasCaptures && !pieceHasCaptures) {
+          return;
+        }
+        
+        setSelectedPiece({ row, col });
+      }
+    }
+  }
+
+  function resetGame() {
+    setBoard(initializeBoard());
+    setSelectedPiece(null);
+    setCurrentPlayer('red');
+    setMustCapture(null);
+  }
+
+  const validMoves = selectedPiece ? getValidMoves(selectedPiece.row, selectedPiece.col) : [];
+  const playerHasCaptures = hasCaptures(currentPlayer);
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 flex flex-col items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        {/* Header */}
+        <div className="flex justify-between items-center mb-4">
+          <h1 className="text-3xl font-bold text-white">Damas</h1>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              className="p-2 bg-gray-700 rounded-lg hover:bg-gray-600 transition"
+            >
+              <Settings className="w-6 h-6 text-white" />
+            </button>
+            <button
+              onClick={resetGame}
+              className="p-2 bg-gray-700 rounded-lg hover:bg-gray-600 transition"
+            >
+              <RotateCcw className="w-6 h-6 text-white" />
+            </button>
+          </div>
+        </div>
+
+        {/* Turno */}
+        <div className="bg-gray-700 rounded-lg p-3 mb-4 text-center">
+          <p className="text-white text-lg">
+            Turno: <span className="font-bold" style={{ color: currentPlayer === 'red' ? redPieceColor : blackPieceColor }}>
+              {currentPlayer === 'red' ? 'Vermelho' : 'Preto'}
+            </span>
+          </p>
+          {mustCapture && (
+            <p className="text-yellow-400 text-sm mt-1">Continue capturando!</p>
+          )}
+          {playerHasCaptures && !mustCapture && (
+            <p className="text-yellow-400 text-sm mt-1">Captura obrigatória!</p>
+          )}
+        </div>
+
+        {/* Settings Panel */}
+        {showSettings && (
+          <div className="bg-gray-700 rounded-lg p-4 mb-4 space-y-3">
+            <h3 className="text-white font-bold mb-2">Personalizar Cores</h3>
+            
+            <div>
+              <label className="text-white text-sm block mb-1">Casa Clara:</label>
+              <input
+                type="color"
+                value={boardColor1}
+                onChange={(e) => setBoardColor1(e.target.value)}
+                className="w-full h-10 rounded cursor-pointer"
+              />
+            </div>
+            
+            <div>
+              <label className="text-white text-sm block mb-1">Casa Escura:</label>
+              <input
+                type="color"
+                value={boardColor2}
+                onChange={(e) => setBoardColor2(e.target.value)}
+                className="w-full h-10 rounded cursor-pointer"
+              />
+            </div>
+            
+            <div>
+              <label className="text-white text-sm block mb-1">Peças Vermelhas:</label>
+              <input
+                type="color"
+                value={redPieceColor}
+                onChange={(e) => setRedPieceColor(e.target.value)}
+                className="w-full h-10 rounded cursor-pointer"
+              />
+            </div>
+            
+            <div>
+              <label className="text-white text-sm block mb-1">Peças Pretas:</label>
+              <input
+                type="color"
+                value={blackPieceColor}
+                onChange={(e) => setBlackPieceColor(e.target.value)}
+                className="w-full h-10 rounded cursor-pointer"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Tabuleiro */}
+        <div className="bg-gray-800 p-2 rounded-lg shadow-2xl">
+          <div className="grid grid-cols-8 gap-0 aspect-square">
+            {board.map((row, rowIndex) => (
+              row.map((piece, colIndex) => {
+                const isLight = (rowIndex + colIndex) % 2 === 0;
+                const isSelected = selectedPiece?.row === rowIndex && selectedPiece?.col === colIndex;
+                const isValidMove = validMoves.some(m => m.row === rowIndex && m.col === colIndex);
+                
+                return (
+                  <div
+                    key={`${rowIndex}-${colIndex}`}
+                    onClick={() => handleSquareClick(rowIndex, colIndex)}
+                    className="relative flex items-center justify-center cursor-pointer transition-all"
+                    style={{
+                      backgroundColor: isLight ? boardColor1 : boardColor2,
+                      boxShadow: isSelected ? 'inset 0 0 0 3px #fbbf24' : 'none'
+                    }}
+                  >
+                    {piece && (
+                      <div
+                        className="absolute w-3/4 h-3/4 rounded-full flex items-center justify-center shadow-lg"
+                        style={{
+                          backgroundColor: piece.color === 'red' ? redPieceColor : blackPieceColor,
+                          border: '2px solid rgba(255,255,255,0.3)'
+                        }}
+                      >
+                        {piece.isKing && (
+                          <span className="text-white font-bold" style={{ fontSize: '1.5rem', lineHeight: 1 }}>♔</span>
+                        )}
+                      </div>
+                    )}
+                    {isValidMove && (
+                      <div className="absolute w-1/3 h-1/3 bg-green-400 rounded-full opacity-60"></div>
+                    )}
+                  </div>
+                );
+              })
+            ))}
+          </div>
+        </div>
+
+        {/* Legenda */}
+        <div className="mt-4 bg-gray-700 rounded-lg p-3">
+          <p className="text-white text-sm text-center">
+            Dama move-se em qualquer distância na diagonal • Capturas múltiplas obrigatórias
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default CheckersGame;
