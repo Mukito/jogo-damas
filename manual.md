@@ -1,7 +1,6 @@
 ## 📱 Passo a Passo para Rodar no VSCode e Criar App para Celular
 ### PARTE 1: Configurar e Rodar no VSCode
 #### 1. Instalar Node.js
-
     * Baixe e instale o Node.js: https://nodejs.org/ 
     * Escolha a versão LTS (recomendada) 
     * Verifique a instalação abrindo o terminal e digitando:
